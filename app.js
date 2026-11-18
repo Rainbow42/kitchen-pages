@@ -8,6 +8,41 @@ const today=()=>iso(new Date());
 const fmt=(s,opts={day:'numeric',month:'long'})=>parse(s).toLocaleDateString('ru-RU',opts);
 const PLAN_DAYS=365;
 const makeSessions=start=>Array.from({length:Math.ceil(PLAN_DAYS/7)*2},(_,i)=>({id:'s'+i,date:add(start,Math.floor(i/2)*7+(i%2)*3-1),index:i,done:false})).filter(s=>diff(s.date,start)<PLAN_DAYS);
+const NOV19_DATE='2026-11-19';
+const NOV19_LASAGNA='Ленивая лазанья с говядиной';
+const NOV19_BEEF='Говяжья вырезка в сливочно-горчичном соусе с мёдом, гречка';
+MEAL_IMAGES[NOV19_BEEF]=MEAL_IMAGES['Бефстроганов, гречка'];
+NUTRITION.foods.nov19Tenderloin={...NUTRITION.foods.beef,name:'Говяжья вырезка'};
+NUTRITION.foods.nov19Cream={name:'Сливки 20%',kcal:206,protein:2.5,fat:20,carbs:4,basis:'из упаковки',note:'Оценка. Сверить этикетку.'};
+const nov19BeefItems=Object.entries({nov19Tenderloin:140,buckwheat:50,nov19Cream:45,onion:25,mustard:4,honey:5,oil:3}).map(([food,grams])=>({food,grams}));
+NUTRITION.meals[NOV19_BEEF]={batch:true,items:nov19BeefItems,totals:Object.fromEntries(
+ ['kcal','protein','fat','carbs'].map(k=>[k,nov19BeefItems.reduce((sum,{food,grams})=>sum+NUTRITION.foods[food][k]*grams/100,0)])
+)};
+const NOV19_STEPS=[
+ ['Подготовка','Разогрейте духовку до 190 °C, верх-низ. Отмерьте всё из списка. Нарежьте 270 г лука и разделите: 120 г для лазаньи и 150 г для вырезки. Поставьте 300 г сухой гречки в мультиварке по инструкции прибора.'],
+ ['Томатная начинка','На 12 г масла обжарьте 120 г лука и 930 г говяжьего фарша, разбивая комочки. Добавьте 660 г томатов и специи. Тушите до густоты. Фарш должен прогреться минимум до 71 °C.'],
+ ['Собрать лазанью','Смешайте 510 г холодного молока и 30 г муки венчиком, прогрейте до загустения, помешивая. В Pragma выложите слоями томатную начинку, 270 г сухих листов и молочный соус. Следуйте указаниям на пачке листов, включая предварительное отваривание, если требуется. Верх полностью покройте соусом, добавьте 90 г сыра.'],
+ ['Запечь лазанью','Пеките при 190 °C до мягкости листов, ориентируясь на упаковку, обычно около 35–45 минут. Проверьте центр термометром: 74 °C.'],
+ ['Вырезка и соус','Пока лазанья в духовке, нарежьте 840 г вырезки поперёк волокон на медальоны. Обжарьте партиями на 18 г масла до 63 °C внутри и дайте отдохнуть 3 минуты. В той же сковороде размягчите 150 г лука, добавьте 270 г сливок, 24 г горчицы и 30 г мёда. Прогрейте на слабом огне. Подавайте вырезку с соусом и гречкой.'],
+ ['Разложить по контейнерам','Разделите каждое блюдо на шесть порций. Гречку, мясо и соус распределите поровну. Уберите в холодильник в неглубоких контейнерах в течение двух часов.']
+];
+const isNov19=s=>s.plan==='nov19';
+function applyNov19(v){
+ if(v.nov19Revision)return;
+ const session=v.sessions.find(s=>s.date===NOV19_DATE)||v.sessions.find(s=>s.index===6&&s.date==='2026-11-17'&&!s.done);
+ if(session){session.date=NOV19_DATE;session.plan='nov19';session.done=false;v.checks={...v.checks,[session.id]:{}};}
+ v.nov19Revision=1;
+}
+function nov19Batch(date){
+ const session=state.sessions.find(isNov19);
+ return session&&diff(date,session.date)>=0&&diff(date,session.date)<3?session:null;
+}
+function batchForMeal(meal,date){
+ const special=nov19Batch(date);
+ if(special&&sessionMeals(special).includes(meal.name))return special;
+ const week=Math.floor(diff(date,state.start)/7);
+ return state.sessions.find(s=>!isNov19(s)&&Math.floor(s.index/2)===week&&sessionMeals(s).includes(meal.name));
+}
 function migrate(v){
  if(!v||!Array.isArray(v.sessions)||![8,makeSessions(v.start).length].includes(v.sessions.length))throw Error();
  let expanded={...v,sessions:makeSessions(v.start).map((s,i)=>v.sessions[i]||(v.scheduleRevision===2?s:{...s,date:add(s.date,1)}))};
@@ -20,10 +55,12 @@ function migrate(v){
  }
  if(!expanded.ovenRevision){expanded.beforeOven={done:expanded.sessions[0].done,checks:expanded.checks?.s0};expanded.sessions[0]={...expanded.sessions[0],done:false};expanded.checks={...expanded.checks,s0:{}};expanded.ovenRevision=1;}
  if(!expanded.nextOvenRevision){expanded.beforeNextOven={done:expanded.sessions[1].done,checks:expanded.checks?.s1};if(!expanded.sessions[1].done)expanded.checks={...expanded.checks,s1:{}};expanded.nextOvenRevision=1;}
+ applyNov19(expanded);
  return expanded;
 }
 let defaults={start:'2026-10-28',sessions:makeSessions('2026-10-28'),checks:{},shopping:{},stock:{},scheduleRevision:2,ovenRevision:1,nextOvenRevision:1};
 let state;try{state=migrate(JSON.parse(localStorage.getItem(KEY)))}catch{state=structuredClone(defaults)}
+applyNov19(state);
 let view='today',selected=today(),month=selected.slice(0,7),sessionId=null,storageError=false;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{storageError=true} }
 save();
@@ -33,9 +70,14 @@ function menuAt(date){
  const nov=novemberDay(date);if(nov>=0)return NOVEMBER_PLAN.week[nov];
  let n=diff(date,state.start),meals=n>=0&&n<3?OVEN_MENU[n]:n>=0&&n<PLAN_DAYS?MENU[Math.floor(n/7)%4][n%7]:null;
  if(n===6)meals=[meals[0],MENU[0][3][1],meals[2],MENU[0][3][3]];
+ const special=nov19Batch(date);
+ if(meals&&special){
+  const swap=diff(date,special.date)%2===1;
+  return meals.map((m,i)=>i===1||i===3?{...m,name:(i===1)!==swap?NOV19_LASAGNA:NOV19_BEEF}:m);
+ }
  return meals&&preparedBreakfastDay(date)?[{...MENU[0][3][0]},...meals.slice(1)]:meals;
 }
-function sessionMeals(s){if(novemberSession(s))return novemberMeals(s);if(s.index===0)return [OVEN_MENU[0][1].name,OVEN_MENU[0][3].name];let w=Math.floor(s.index/2)%4,offset=s.index%2?3:0;return [MENU[w][offset][1].name,MENU[w][offset][3].name]}
+function sessionMeals(s){if(isNov19(s))return [NOV19_LASAGNA,NOV19_BEEF];if(novemberSession(s))return novemberMeals(s);if(s.index===0)return [OVEN_MENU[0][1].name,OVEN_MENU[0][3].name];let w=Math.floor(s.index/2)%4,offset=s.index%2?3:0;return [MENU[w][offset][1].name,MENU[w][offset][3].name]}
 function sessionsAt(date){return state.sessions.filter(s=>s.date===date)}
 function shoppingDay(date){const target=add(date,2);return !!menuAt(target)&&diff(target,state.start)%7===0}
 function weekKey(date){let d=parse(date).getDay();return add(date,-((d+6)%7))}
@@ -48,7 +90,7 @@ function toolbar(){return `<header><div class="brand"><span class="brand-mark" a
 function banner(){let s=nextSession();if(!s)return '';let days=diff(s.date,today());let color=days<=0?'red':days<=3?'yellow':'';return `<div class="banner ${color}"><div><strong>${days<0?'Готовка просрочена':days===0?'Сегодня готовим':days<=3?'Готовка через '+days+' дн.':'Следующая готовка'} · ${fmt(s.date)}</strong><div>${esc(sessionMeals(s).join(' и '))}</div></div><button onclick="openSession('${s.id}')">Открыть →</button></div>`}
 function mealStatus(meal,date){
   const day=diff(date,state.start),week=Math.floor(day/7);
-  const batch=state.sessions.find(s=>Math.floor(s.index/2)===week&&sessionMeals(s).includes(meal.name));
+  const batch=batchForMeal(meal,date);
   if(!batch)return '<span class="pill">Собрать / разогреть по меню</span>';
   if(batch.done&&batch.date<=date)return '<span class="pill green">Готовка отмечена · разогреть порцию</span>';
   return `<span class="pill">${batch.date>date?'Готовка позже меню — нужна замена':'Готовность пока не отмечена'}</span>`;
@@ -56,7 +98,7 @@ function mealStatus(meal,date){
 function dayPage(){let meals=menuAt(selected),ss=sessionsAt(selected);return `<div class="row day-heading"><div><div class="eyebrow">${selected===today()?'Сегодня':fmt(selected,{weekday:'long'})} · на двоих</div><h1>${fmt(selected)}</h1>${menuAt(selected)?`<p class="muted">Неделя ${Math.floor(diff(selected,state.start)/7)%4+1} из 4 · цикл ${Math.floor(diff(selected,state.start)/28)+1}</p>`:""}</div><div class="date-control"><span class="date-caption">Ваш день в меню</span><input class="dateinput" type="date" value="${selected}" aria-label="Показать меню на дату" onchange="selected=this.value||today();render()"></div></div>${ss.some(s=>!s.done)?'<div class="notice red"><strong>День готовки.</strong> Задача приготовления показана отдельно справа или ниже меню. Само меню — план питания, а не подтверждение наличия готовой еды.</div>':''}${shoppingDay(selected)&&!completedShopping(selected)?'<div class="notice yellow"><strong>Пора заказать продукты на следующий семидневный блок.</strong> Сначала проверьте остатки. <button onclick="navigate(\'shopping\')">К списку</button></div>':''}<div class="layout day-layout"><section>${meals?nutritionDay(selected):""}<h2>Что едим за весь день</h2>${novemberDay(selected)>=0?novemberInfo():''}${meals&&preparedBreakfastDay(selected)?'<div class="notice yellow"><strong>Завтраки 1–3 ноября обновлены.</strong> Курица и яйца из одной заготовки на двоих на три дня. Утром только разогреть и добавить хлеб, творожный сыр и овощи. <button onclick="openMeal(0)">Как собрать завтрак →</button></div>':''}${diff(selected,state.start)===3?'<div class="notice yellow"><strong>Суббота — тоже без плиты.</strong> Минтай и котлеты запекаем в пятницу, рис и гречку готовим в мультиварке. Яйцо на завтрак — в духовке. <button onclick="openSession(\'s1\')">Готовка к субботе →</button></div>':''}${diff(selected,state.start)>=-1&&diff(selected,state.start)<3?`<div class="notice yellow"><strong>Первые три дня — без плиты.</strong> Два основных блюда и основа завтрака запекаются в духовке. <button class="primary" onclick="openSession('s0')">Начать готовку без плиты →</button></div>`:""}<p class="muted">Все 4 приёма пищи: завтрак, обед, полдник и ужин. Гарниры и соусы входят в названия блюд.</p>${meals?`<div class="menu daily-menu">${meals.map(m=>`<div class="meal">${mealImage(m.name)}<span class="eyebrow">${m.label}</span><strong>${esc(displayMealName(m.name))}</strong><span class="muted">Порции одинаковые для обоих взрослых</span>${nutritionMeal(m.name)}${servingGuide(m.name)}${mealStatus(m,selected)}<button onclick="openMeal(${meals.indexOf(m)})">Как приготовить / подать</button></div>`).join('')}</div>`:'<div class="panel">Меню начинается с указанной ниже даты. Первая готовка — накануне, чтобы на следующий день уже были готовые блюда. План охватывает 365 дней с '+fmt(state.start)+'. <button onclick="selected=state.start;render()">К началу плана</button></div>'}<p class="muted">Расчёт около 1800 ккал на каждого включает все 4 приёма пищи, масло и соусы. Это оценка по выбранным продуктам; этикетки ваших упаковок могут отличаться. Вода и несладкий чай — без добавок.</p></section><aside><h2>${ss.length?'Готовим в этот день':'График готовки'}</h2>${(ss.length?ss:[nextSession()].filter(Boolean)).map(s=>`<div class="panel ${!s.done&&s.date===selected?'red':''}">${badge(s)}<h3>${esc(sessionMeals(s).join(' + '))}</h3><p>${fmt(s.date)} · едим с ${fmt(add(state.start,Math.floor(s.index/2)*7+s.index%2*3))} по ${fmt(add(state.start,Math.floor(s.index/2)*7+s.index%2*3+2))}</p><div class="stack"><button class="primary" onclick="openSession('${s.id}')">Пошаговая готовка →</button><button onclick="moveDialog('${s.id}')">Перенести</button>${!s.done?`<button onclick="confirmPrepared('${s.id}')">Уже приготовлено</button>`:''}</div></div>`).join('')}<div class="panel"><span class="eyebrow">Меньше хлопот</span><p>Овощи нарезаем одной партией. Духовку разогреваем один раз. Соусы и гарниры готовим, пока запекается основное.</p></div></aside></div>`}
 function openMeal(index){
  const meal=menuAt(selected)[index],week=Math.floor(diff(selected,state.start)/7);
- const batch=state.sessions.find(s=>Math.floor(s.index/2)===week&&sessionMeals(s).includes(meal.name));
+ const batch=batchForMeal(meal,selected);
  if(batch){openSession(batch.id);return;}
  if(novemberOpenMeal(meal,selected))return;
  if(diff(selected,state.start)<3&&meal.label==='Завтрак'){openSession('s0');return;}
@@ -76,7 +118,7 @@ function calendarPage(){let first=month+'-01',offset=(parse(first).getDay()+6)%7
 function changeMonth(n){let d=parse(month+'-01');d.setMonth(d.getMonth()+n);month=iso(d).slice(0,7);render()}
 const firstIngredients=['Куриное филе — 1,2 кг','Картофельные дольки — 1 кг','Говяжий фарш — 1,2 кг','Томаты Mutti — 800 г','Лук — 200 г','Пенне — 500 г сухих','Оливковое масло — до 30 г на все блюда','Паприка, сухой чеснок, соль — по вкусу'];
 const secondIngredients=['Минтай — 1,3 кг','Котлеты индейки — 1,35 кг','Томаты Mutti — 800 г','Рис — 360 г сухого','Гречка — 360 г сухой','Кабачок — 1 кг','Лук — 200 г','Масло — до 20 г на все блюда; специи'];
-function stepsFor(s){if(novemberSession(s))return NOVEMBER_STEPS[s.index];if(s.index===0)return OVEN_STEPS;if(s.index===1)return NEXT_OVEN_STEPS;if(s.index%8===0)return [
+function stepsFor(s){if(isNov19(s))return NOV19_STEPS;if(novemberSession(s))return NOVEMBER_STEPS[s.index];if(s.index===0)return OVEN_STEPS;if(s.index===1)return NEXT_OVEN_STEPS;if(s.index%8===0)return [
 ['Подготовить всё сразу · 0–5 мин','Разогрейте духовку до 190 °C с конвекцией. Достаньте форму, противень, глубокую сковороду и кастрюлю. Вскипятите воду для пасты. Отмерьте ингредиенты из списка на две партии по 6 порций.'],
 ['Общая нарезка · 5–12 мин','Отделите 30 г масла для курицы с картофелем и 30 г для болоньезе. Сначала нарежьте весь лук. Разложите картофель на противне одним слоем, добавьте часть масла и паприку. Затем на отдельной доске обработайте курицу, смешайте со специями и оставшейся частью масла, отложенного для курицы с картофелем. Вымойте руки, нож и доску.'],
 ['Запустить духовку и соус · 12–20 мин','Поставьте курицу в форме ниже картофеля, оставьте между уровнями место для воздуха. На отложенном для болоньезе масле размягчите лук и обжарьте фарш, разбивая комочки. Не оставляйте сковороду без внимания.'],
@@ -93,7 +135,7 @@ if(s.index%8===1)return [
 return RECIPES[s.index%8-2].steps;}
 function ingredientsFor(s){return ingredientLines(sessionMeals(s),6);}
 
-function cookPage(){let s=state.sessions.find(x=>x.id===sessionId);if(!s)return '';if(novemberSession(s))return novemberCookPage(s);if(s.index===0)return ovenCookPage(s);if(s.index===1)return nextOvenCookPage(s);let steps=stepsFor(s),checks=state.checks[s.id]||{},all=steps.every((_,i)=>checks[i]);return `<button class="back" onclick="navigate('today')">← К меню</button><div class="eyebrow">Готовим вместе · ${fmt(s.date)}</div><h1>Одна сессия — два блюда</h1><p style="font-size:22px">${esc(sessionMeals(s).join(' + '))}</p><div class="stack">${badge(s)}<span class="pill">${s.index%8<2?'≈30–40 мин активно + ожидание':RECIPES[s.index%8-2].time}</span><button onclick="moveDialog('${s.id}')">Перенести дату</button></div><div class="notice yellow">Обновлённые количества рассчитаны на две партии по 6 порций, примерно по 550 ккал в порции. Отмеряйте по таблицам ниже: они уже учитывают масло и соусы. Старые, уже приготовленные партии могли иметь другой состав — эти КБЖУ к ним автоматически не относятся.</div><div class="recipe-portions">${sessionMeals(s).map(n=>`<details class="panel"><summary>Порции и состав: ${esc(n)}</summary>${portionDetails(n,true)}</details>`).join("")}</div><div class="layout"><section>${steps.map(([title,text],i)=>`<label class="step ${checks[i]?'done':''}"><input type="checkbox" ${checks[i]?'checked':''} onchange="checkStep('${s.id}',${i},this.checked)" aria-label="Шаг ${i+1}: ${esc(title)}"><div><span class="eyebrow">Шаг ${i+1} / ${steps.length}</span><h3>${esc(title)}</h3><p>${esc(text)}</p></div></label>`).join('')}<button class="primary" style="margin-top:24px" ${all?'':'disabled'} onclick="finishSession('${s.id}')">${s.done?'Готовка отмечена':'Всё готово — отметить сессию'}</button></section><aside><div class="panel"><h2>На всю партию</h2>${ingredientsFor(s).map(i=>`<div class="ingredient">${esc(i)}</div>`).join('')}<p class="muted">По 6 порций каждого блюда на двоих на 3 дня. Завтраки, полдники и воскресенье готовятся отдельно; в эту партию не входят.</p></div><div class="panel"><h3>Отдельные таймеры</h3><p class="muted">Используйте таймеры iPad для духовки и каждой кастрюли: браузер может уснуть в фоне.</p><p>Готовые блюда и сырые продукты держите отдельно. Духовка, сковорода и вода продолжают работать, пока вы отмечаете шаги.</p></div></aside></div>`}
+function cookPage(){let s=state.sessions.find(x=>x.id===sessionId);if(!s)return '';if(novemberSession(s))return novemberCookPage(s);if(s.index===0)return ovenCookPage(s);if(s.index===1)return nextOvenCookPage(s);let steps=stepsFor(s),checks=state.checks[s.id]||{},all=steps.every((_,i)=>checks[i]);return `<button class="back" onclick="navigate('today')">← К меню</button><div class="eyebrow">Готовим вместе · ${fmt(s.date)}</div><h1>Одна сессия — два блюда</h1><p style="font-size:22px">${esc(sessionMeals(s).join(' + '))}</p><div class="stack">${badge(s)}<span class="pill">${isNov19(s)?'≈45–60 мин активно + ожидание':s.index%8<2?'≈30–40 мин активно + ожидание':RECIPES[s.index%8-2].time}</span><button onclick="moveDialog('${s.id}')">Перенести дату</button></div><div class="notice yellow">Обновлённые количества рассчитаны на две партии по 6 порций, примерно по 550 ккал в порции. Отмеряйте по таблицам ниже: они уже учитывают масло и соусы. Старые, уже приготовленные партии могли иметь другой состав — эти КБЖУ к ним автоматически не относятся.</div><div class="recipe-portions">${sessionMeals(s).map(n=>`<details class="panel"><summary>Порции и состав: ${esc(n)}</summary>${portionDetails(n,true)}</details>`).join("")}</div><div class="layout"><section>${steps.map(([title,text],i)=>`<label class="step ${checks[i]?'done':''}"><input type="checkbox" ${checks[i]?'checked':''} onchange="checkStep('${s.id}',${i},this.checked)" aria-label="Шаг ${i+1}: ${esc(title)}"><div><span class="eyebrow">Шаг ${i+1} / ${steps.length}</span><h3>${esc(title)}</h3><p>${esc(text)}</p></div></label>`).join('')}<button class="primary" style="margin-top:24px" ${all?'':'disabled'} onclick="finishSession('${s.id}')">${s.done?'Готовка отмечена':'Всё готово — отметить сессию'}</button></section><aside><div class="panel"><h2>${isNov19(s)?'Что проверить и докупить':'На всю партию'}</h2>${isNov19(s)?'<p>В первую очередь проверьте вырезку, фарш, листы лазаньи, сливки и сыр. Из списка вычтите пригодные остатки. Для соуса нужны горчица и мёд.</p>':''}${ingredientsFor(s).map(i=>`<div class="ingredient">${esc(i)}</div>`).join('')}<p class="muted">По 6 порций каждого блюда на двоих на 3 дня. Завтраки, полдники и воскресенье готовятся отдельно; в эту партию не входят.</p></div><div class="panel"><h3>Отдельные таймеры</h3><p class="muted">Используйте таймеры iPad для духовки и каждой кастрюли: браузер может уснуть в фоне.</p><p>Готовые блюда и сырые продукты держите отдельно. Духовка, сковорода и вода продолжают работать, пока вы отмечаете шаги.</p></div></aside></div>`}
 function checkStep(id,i,value){state.checks[id]??={};state.checks[id][i]=value;if(!value)state.sessions.find(s=>s.id===id).done=false;save();render()}
 function confirmPrepared(id){if(confirm('Отметить все блюда этой партии как уже приготовленные?'))finishSession(id)}
 function finishSession(id){state.sessions.find(s=>s.id===id).done=true;save();render();toast('Готовка отмечена')}
