@@ -18,6 +18,14 @@ const nov19BeefItems=Object.entries({nov19Tenderloin:140,buckwheat:50,nov19Cream
 NUTRITION.meals[NOV19_BEEF]={batch:true,items:nov19BeefItems,totals:Object.fromEntries(
  ['kcal','protein','fat','carbs'].map(k=>[k,nov19BeefItems.reduce((sum,{food,grams})=>sum+NUTRITION.foods[food][k]*grams/100,0)])
 )};
+const NOV19_SNACK='Скир, банан и хлеб с отрубями';
+MEAL_IMAGES[NOV19_SNACK]=MEAL_IMAGES['Скир + банан + хлебец'];
+const nov19SnackItems=NUTRITION.meals['Скир + банан + хлебец'].items.map(item=>
+ NUTRITION.foods[item.food].name==='Хлебцы'?{food:Object.keys(NUTRITION.foods).find(k=>NUTRITION.foods[k].name==='Хлеб с отрубями'),grams:20}:item
+);
+NUTRITION.meals[NOV19_SNACK]={batch:false,items:nov19SnackItems,totals:Object.fromEntries(
+ ['kcal','protein','fat','carbs'].map(k=>[k,nov19SnackItems.reduce((sum,{food,grams})=>sum+NUTRITION.foods[food][k]*grams/100,0)])
+)};
 const NOV19_STEPS=[
  ['Подготовка','Разогрейте духовку до 190 °C, верх-низ. Отмерьте всё из списка. Нарежьте 270 г лука и разделите: 120 г для лазаньи и 150 г для вырезки. Поставьте 300 г сухой гречки в мультиварке по инструкции прибора.'],
  ['Томатная начинка','На 12 г масла обжарьте 120 г лука и 930 г говяжьего фарша, разбивая комочки. Добавьте 660 г томатов и специи. Тушите до густоты. Фарш должен прогреться минимум до 71 °C.'],
@@ -73,7 +81,11 @@ function menuAt(date){
  const special=nov19Batch(date);
  if(meals&&special){
   const swap=diff(date,special.date)%2===1;
-  return meals.map((m,i)=>i===1||i===3?{...m,name:(i===1)!==swap?NOV19_LASAGNA:NOV19_BEEF}:m);
+  return meals.map((m,i)=>{
+   if(i===0)return {...m,name:'Сырники + готовые стрипсы; йогурт'};
+   if(i===2)return swap?{...m,name:NOV19_SNACK}:m;
+   return {...m,name:(i===1)!==swap?NOV19_LASAGNA:NOV19_BEEF};
+  });
  }
  return meals&&preparedBreakfastDay(date)?[{...MENU[0][3][0]},...meals.slice(1)]:meals;
 }
