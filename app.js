@@ -148,15 +148,21 @@ return RECIPES[s.index%8-2].steps;}
 function ingredientsFor(s){return ingredientLines(sessionMeals(s),6);}
 
 function nov19Diagrams(){
+ const [meat, sauce]=NOV19_STEPS[4][1].split(' Для соуса в Pragma №2 ');
  const lanes=[
-  ['Лазанья · Pragma №1',NOV19_STEPS.slice(1,4)],
-  ['Говядина · Pragma №2 и №3',[
-   ['Мультиварка','Поставьте 300 г сухой гречки параллельно.'],
-   NOV19_STEPS[4],
-   ['Подача','Говядина полосками из формы №3 + грибной соус из формы №2. Гречку положите рядом.']
+  ['Лазанья · Pragma №1',[
+   ['mince',...NOV19_STEPS[1]],
+   ['lasagna',...NOV19_STEPS[2]],
+   ['oven',...NOV19_STEPS[3]]
+  ]],
+  ['Бефстроганов с гречкой',[
+   ['strips','Мясо · Pragma №3',meat],
+   ['grain','Мультиварка','Поставьте 300 г сухой гречки параллельно.'],
+   ['mushrooms','Грибной соус · Pragma №2','В Pragma №2 '+sauce.charAt(0).toLowerCase()+sauce.slice(1)],
+   ['boxes','Разложить по контейнерам',NOV19_STEPS[5][1]]
   ]]
  ];
- return `<section aria-label="Схемы готовки"><h2>Что и куда кладём</h2><p>Шаг 0. Разогрейте духовку до 190 °C, подготовьте Pragma и отмерьте продукты. Если три формы не помещаются с зазорами, запекайте в две загрузки. Фольгу не используйте.</p><div class="nov19-diagrams">${lanes.map(([title,steps])=>`<article class="panel"><h3>${title}</h3><ol>${steps.map(([label,detail])=>`<li><strong>${label}</strong><p>${detail}</p></li>`).join('')}</ol></article>`).join('')}</div></section>`;
+ return `<section aria-label="Схемы готовки"><h2>Что и куда кладём</h2><p>Шаг 0. Разогрейте духовку до 190 °C, подготовьте Pragma и отмерьте продукты. Если три формы не помещаются с зазорами, запекайте в две загрузки. Фольгу не используйте.</p><div class="nov19-diagrams">${lanes.map(([title,steps])=>`<article class="panel"><h3>${title}</h3><ol>${steps.map(([kind,label,detail])=>`<li>${flowDrawing(kind)}<strong>${label}</strong><p>${detail}</p></li>`).join('')}</ol></article>`).join('')}</div></section>`;
 }
 function cookPage(){let s=state.sessions.find(x=>x.id===sessionId);if(!s)return '';if(novemberSession(s))return novemberCookPage(s);if(s.index===0)return ovenCookPage(s);if(s.index===1)return nextOvenCookPage(s);let steps=stepsFor(s),checks=state.checks[s.id]||{},all=steps.every((_,i)=>checks[i]);return `<button class="back" onclick="navigate('today')">← К меню</button><div class="eyebrow">Готовим вместе · ${fmt(s.date)}</div><h1>Одна сессия — два блюда</h1><p style="font-size:22px">${esc(sessionMeals(s).join(' + '))}</p><div class="stack">${badge(s)}<span class="pill">${isNov19(s)?'≈45–60 мин активно + ожидание':s.index%8<2?'≈30–40 мин активно + ожидание':RECIPES[s.index%8-2].time}</span><button onclick="moveDialog('${s.id}')">Перенести дату</button></div><div class="notice yellow">Обновлённые количества рассчитаны на две партии по 6 порций, примерно по 550 ккал в порции. Отмеряйте по таблицам ниже: они уже учитывают масло и соусы. Старые, уже приготовленные партии могли иметь другой состав — эти КБЖУ к ним автоматически не относятся.</div>${isNov19(s)?nov19Diagrams():''}<div class="recipe-portions">${sessionMeals(s).map(n=>`<details class="panel"><summary>Порции и состав: ${esc(n)}</summary>${portionDetails(n,true)}</details>`).join("")}</div><div class="layout"><section>${steps.map(([title,text],i)=>`<label class="step ${checks[i]?'done':''}"><input type="checkbox" ${checks[i]?'checked':''} onchange="checkStep('${s.id}',${i},this.checked)" aria-label="Шаг ${i+1}: ${esc(title)}"><div><span class="eyebrow">Шаг ${i+1} / ${steps.length}</span><h3>${esc(title)}</h3><p>${esc(text)}</p></div></label>`).join('')}<button class="primary" style="margin-top:24px" ${all?'':'disabled'} onclick="finishSession('${s.id}')">${s.done?'Готовка отмечена':'Всё готово — отметить сессию'}</button></section><aside><div class="panel"><h2>${isNov19(s)?'Что проверить и докупить':'На всю партию'}</h2>${isNov19(s)?'<p>В первую очередь проверьте говядину полосками, фарш, листы лазаньи, шампиньоны, сливки и сыр. Из списка вычтите пригодные остатки.</p>':''}${ingredientsFor(s).map(i=>`<div class="ingredient">${esc(i)}</div>`).join('')}<p class="muted">По 6 порций каждого блюда на двоих на 3 дня. Завтраки, полдники и воскресенье готовятся отдельно; в эту партию не входят.</p></div><div class="panel"><h3>Отдельные таймеры</h3><p class="muted">Используйте отдельные таймеры iPad для каждой формы и гарнира: браузер может уснуть в фоне.</p><p>Готовые блюда и сырые продукты держите отдельно. Отсчитывайте время отдельно с момента, когда поставили каждую форму в разогретую духовку.</p></div></aside></div>`}
 function checkStep(id,i,value){state.checks[id]??={};state.checks[id][i]=value;if(!value)state.sessions.find(s=>s.id===id).done=false;save();render()}
