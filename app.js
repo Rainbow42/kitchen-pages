@@ -9,6 +9,7 @@ const fmt=(s,opts={day:'numeric',month:'long'})=>parse(s).toLocaleDateString('ru
 const PLAN_DAYS=365;
 const makeSessions=start=>Array.from({length:Math.ceil(PLAN_DAYS/7)*2},(_,i)=>({id:'s'+i,date:add(start,Math.floor(i/2)*7+(i%2)*3-1),index:i,done:false})).filter(s=>diff(s.date,start)<PLAN_DAYS);
 const NOV19_DATE='2026-11-19';
+const NOV24_DATE='2026-11-24';
 const NOV19_LASAGNA='Ленивая лазанья с говядиной';
 const NOV19_BEEF='Бефстроганов в сливочно-грибном соусе, гречка';
 MEAL_IMAGES[NOV19_BEEF]=MEAL_IMAGES['Бефстроганов, гречка'];
@@ -46,7 +47,7 @@ function nov19Batch(date){
  return session&&diff(date,session.date)>=0&&diff(date,session.date)<3?session:null;
 }
 function batchForMeal(meal,date){
- const special=nov19Batch(date);
+ const special=date===NOV24_DATE?state.sessions.find(isNov19):nov19Batch(date);
  if(special&&sessionMeals(special).includes(meal.name))return special;
  const week=Math.floor(diff(date,state.start)/7);
  return state.sessions.find(s=>!isNov19(s)&&Math.floor(s.index/2)===week&&sessionMeals(s).includes(meal.name));
@@ -78,6 +79,7 @@ function menuAt(date){
  const nov=novemberDay(date);if(nov>=0)return NOVEMBER_PLAN.week[nov];
  let n=diff(date,state.start),meals=n>=0&&n<3?OVEN_MENU[n]:n>=0&&n<PLAN_DAYS?MENU[Math.floor(n/7)%4][n%7]:null;
  if(n===6)meals=[meals[0],MENU[0][3][1],meals[2],MENU[0][3][3]];
+ if(meals&&date===NOV24_DATE)return [meals[0],{...meals[1],name:NOV19_LASAGNA},meals[2],{...meals[3],name:NOV19_BEEF}];
  const special=nov19Batch(date);
  if(meals&&special){
   const swap=diff(date,special.date)%2===1;
